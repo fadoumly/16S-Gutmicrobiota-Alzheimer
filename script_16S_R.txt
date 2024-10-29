@@ -1,0 +1,150 @@
+############Mice gut microbiota analysis#############
+library (gplots)
+library(pvclust)
+library(vegan)
+library(ade4)
+library(phyloseq)
+#sur galaxy transposer le fichier .shared (c'est l'OTU Table) avec la fonction transpose 
+#sous excel ouvrir ce fichier (otu en lignes, echantillons en colonnes) et enlever la ligne labells et la ligne nombre d'OTUs, 
+#coller l'assignation taxonomique du fichier .taxonomy
+# dans R enlever les singletons
+# cela peut etre fait en amont sous mothur avec usearch
+#usearch -sortbysize derep.fasta -output derep2.fasta -minsize 2
+#ou bien dans R avec la commande data_no_singletons = data[rowSums(data)!=1,] ou encore data_cleaned = data[rowSums(data)> 1,]
+#attention le tableau doit etre importe dans R avec row.names=1, et les entetes de colonne heading YES
+#adapter la commande sur les colonnes numerics en fonction du nombre d'echantillons
+OTUnsinglet <-makesharedbactgoodtaxt[rowSums(makesharedbactgoodtaxt[,1:4])> 1,]
+#dans l'example j'ai un fichier avec otu et taxonomie ensemble, e n'ai que 5 echantillons (colonnes 1 à 4) et 6 niveaux taxonomiques de 1 a 6 (colonnes 5 à10)
+# garder la table des OTUs transposee, avec et sans les indications taxonomiques, avec et sans les singletons, 
+OTUsbactsingletrans<-(OTUnsinglet[,1:4])
+OTUbactsingletaxt<-(OTUnsinglet[,5:10])
+# on peut aussi enlever des lignes et colonnes dans R avec 
+#album2 <- album[, -5] #delete column 5
+#album2 <- album[, -c(5:7)] # delete columns 5 through 7
+
+#########################diversite alpha
+# transposer le tableau (ech en ligne, otus en colonnes)
+OTUbactns<-t(OTUsbactsingletrans)
+OTUbactns<-as.matrix(OTUbactns)
+OTUbactns<-as.data.frame((OTUbactns))
+richness<- specnumber(OTUbactns)
+shannon<-diversity(OTUbactns) 
+eveness<-diversity(OTUbactns)/log(specnumber(OTUbactns)) 
+#PM<-c("10.0","5.6","3.5","1.8")
+alphabact<-cbind(PM, eveness, richness, shannon)
+write.table(alphabact, "alphabact.txt", sep=";")
+#reimporter alphabact dans R
+#rajouter ces colonnes dans le tableau de synthese avec les metadonnées
+# vous pouvez faire des analyses descriptives, graphiques, analyse stat sur le tableau de synthese
+barplot(alphabact$richness~as.factor(alphabact$PM), col="steelblue",xlab="seuil de coupure (\u00b5m)", ylab="richesse en OTUs")
+barplot(alphabact$eveness~as.factor(alphabact$PM), col="steelblue",xlab="seuil de coupure (\u00b5m)", ylab="équitabilité")
+barplot(alphabact$shannon~as.factor(alphabact$PM), col="steelblue",xlab="seuil de coupure (\u00b5m)", ylab="indice de Shannon-Wiener")
+
+##########diversité beta et classification hierarchique
+bray <- vegdist(wisconsin(sqrt(OTUbactns)))
+bray2 <- as.matrix (bray, labels = T)
+write.csv(as.matrix(bray2), "matrixbraybact.csv")
+set.seed(6218)
+pfit<- hclust(bray, method="ward.D2")
+plot(pfit)
+hdc2<-as.dendrogram(pfit)
+labelColors = c("#CDB380", "#036564", "#4ECDC4", "#0033FF","#EDC951")
+# cut dendrogram in 5 clusters
+clusMember2 = cutree(pfit, 5)
+# function to get color labels
+colLab2 <- function(n) {
+  if (is.leaf(n)) {
+    a <- attributes(n)
+    labCol <- labelColors[clusMember2[which(names(clusMember2) == a$label)]]
+    attr(n, "nodePar") <- c(a$nodePar, lab.col = labCol)
+  }
+  n
+}
+# using dendrapply pour appliquer la fonction collab2 au dendrogramm hdc2
+clusDendro2 = dendrapply(hdc2, colLab2)
+# make plot
+plot(clusDendro2, cex.lab =1)
+#heatmap
+# pour chercher des commandes pour creer des palettes de couleurs dans R 
+?cm.colors
+col<- colorRampPalette(c("red", "white", "blue"))(256)
+# ou bien 
+scaleblue<-colorRampPalette(colors=c("white","blue"))(100)
+heat2<-heatmap(OTUbactns[,c(1:30)], Colv=NA, col=col, xlab="sample", ylab="phylum", margins=c(5,8))
+
+######heatmap
+library(gplots)  # for heatmap.2
+# to install packages from Bioconductor:
+source("http://bioconductor.org/biocLite.R")
+biocLite("Heatplus")  # annHeatmap or annHeatmap2
+library(Heatplus)
+# load the vegan package for hierachical clustering if you want to use distance functions not specified in dist.
+library(vegan)
+# load the RColorBrewer package for better colour options
+library(RColorBrewer)
+#on utilise la table des OTUs, samples in row, species in columns, les noms d'especes et echantillons en entete
+# creer un vecteur de couleurs avec colorRampPalette is in the RColorBrewer package.  This creates a colour palette that shades from light yellow to red in RGB space with 100 unique colours
+scaleyellowred <- colorRampPalette(c("lightyellow", "red"), space = "rgb")(100)
+# heatmap de base
+heatmap(as.matrix(data.prop), Rowv = NA, Colv = NA, col = scaleyellowred)
+# pour rendre plus lisible enlever les taxons <1%
+# determine the maximum relative abundance for each column
+maxab <- apply(data.prop, 2, max)
+# remove the genera with less than 1% as their maximum relative abundance
+n1 <- names(which(maxab < 0.01))
+data.prop.1 <- data.prop[, -which(names(data.prop) %in% n1)]
+# the margins command sets the width of the white space around the plot. The first element is the bottom margin and the second is the right margin
+heatmap(as.matrix(data.prop.1), Rowv = NA, Colv = NA, col = scaleyellowred, margins = c(10, 2))
+# calculate the Bray-Curtis dissimilarity matrix on the full dataset:
+data.dist <- vegdist(data.prop, method = "bray")
+# Do average linkage hierarchical clustering. Other options are 'complete' or 'single'. You'll need to choose the one that best fits the needs of your situation and your data.
+row.clus <- hclust(data.dist, "aver")
+# make the heatmap with Rowv = as.dendrogram(row.clus)
+heatmap(as.matrix(data.prop.1), Rowv = as.dendrogram(row.clus), Colv = NA, col = scaley
+
+
+############RDA
+library(vegan)
+# il nous faut la table des OTUs et le fichier de synthese ou un fichier avec que vos variables explicatives,
+#les échantillons dans le meme ordre dans les deux fichiers
+# NB ici exemple avec des metabolites, les OTUs sont le pendant => a adapter
+#importer les deux matrices row.names=1, h=T
+##Transformer les données
+#Centrer-réduire les données de concentrations en metabolites (z-score)
+metaboz<-scale(metabo)
+#Logx+1 pour le temps
+exp$timelog<-log1p(exp$time)
+# que les variables explicatives necessaires
+exp2<-exp[,-2]
+exp3<-exp[,c("timelog","traitement")]
+RDA<-rda(metaboz~traitement+timelog, data=exp3)
+RDA
+RDA1<-14.833
+RDA2<-9.232
+RDATotal<-137
+RDA1p<-RDA1*100/RDATotal
+RDA2p<-RDA2*100/RDATotal
+RDA1p+RDA2p
+#17.6% expliqué
+#barplot avec le %expliqué
+constr_eig <- RDA$CCA$eig/RDA$tot.chi*100
+unconstr_eig <- RDA$CA$eig/RDA$tot.chi*100
+expl_var <- c(constr_eig, unconstr_eig)
+barplot (expl_var[1:10], col = c(rep ('red', length (constr_eig)), rep ('black', length (unconstr_eig))),
+         las = 2, ylab = '% variation')
+#ordination: montrer les espèces
+ordiplot(RDA, display = 'species', choices = c(3,4), type = 'n')
+orditorp (RDA, display = 'species', choices = c(3,4), pcol = 'grey', pch = '+')
+#montrer les traitements et le temps
+ordiplot (RDA, choices = c(3,4), type = 'n')
+points (RDA, choices = c(3,4), display = 'sites', pch =as.numeric(exp2$groupe) , cex=0.5, col = exp2$groupe)
+ef <- envfit (RDA, exp3, choices = c(3,4), permutations = 0)
+plot (ef)
+ef
+#variante pour savoir qui est qui, c=Nacl+co2, N=Nacl
+ordiplot (RDA, choices = c(3,4), type = 'n')
+points (RDA, choices = c(3,4), display = 'sites', pch =as.character(exp2$groupe) , cex=0.5, col = exp2$groupe)
+ef <- envfit (RDA, exp3, choices = c(3,4), permutations = 0)
+plot (ef)
+# voir les r²
+ef
