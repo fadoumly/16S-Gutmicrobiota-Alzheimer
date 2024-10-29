@@ -1,0 +1,60 @@
+##16S Microbiote intestinal###
+
+##Traitement des séquences Fastq pour obtenir une table d'OTUs (Operational Taxonomic Units) ou d'ASV (Amplicon Sequence Variants) 
+
+Pipeline pour le traitement des séquences Fastq
+
+1. Préparation des données
+Collecte des fichiers Fastq : fichiers Fastq nécessaires (forward et reverse), fichiers SILVA + fichiers oligos 
+
+2. Évaluation de la qualité des séquences
+Visualisation de la qualité :
+Mothur : Utiliser summary.seqs pour obtenir des statistiques sur les séquences.
+DADA2 : Utiliser plotQualityProfile pour visualiser les profils de qualité des lectures.
+
+3. Filtrage et nettoyage des lectures
+Filtrer les lectures selon la qualité :
+DADA2 : Utiliser filterAndTrim pour filtrer les lectures en fonction de la qualité (ex. : enlever les lectures de mauvaise qualité, tronquer les lectures).
+Mothur : Utiliser screen.seqs pour éliminer les séquences en fonction de critères (longueur, ambiguïtés).
+
+4. Assemblage des contigs (si applicable)
+Assembler les contigs à partir des lectures pairs :
+Mothur : Utiliser make.contigs pour assembler les lectures forward et reverse.
+
+5. Dédoublonnage
+Regrouper les lectures identiques :
+DADA2 : Utiliser derepFastq pour dédupliquer les lectures.
+Mothur : Utiliser unique.seqs pour garder un exemplaire de chaque séquence unique.
+
+6. Identification des ASV ou OTUs
+DADA2 : Utiliser dada pour identifier les ASV à partir des lectures dédupliquées.
+Mothur : Utiliser cluster.split ou cluster pour regrouper les séquences en OTUs, en fonction de la distance (97%).
+
+7. Élimination des chiméres
+Détection et suppression des séquences chimériques :
+DADA2 : Utiliser removeBimeraDenovo.
+Mothur : Utiliser chimera.vsearch ou chimera.uchime pour identifier et retirer les chimères.
+
+8. Assignation taxonomique
+Classer les séquences :
+DADA2 : Utiliser assignTaxonomy pour assigner des taxons aux ASV.
+Mothur : Utiliser classify.seqs pour assigner des taxons aux OTUs.
+
+9. Construction de la table d'OTUs/ASV
+Générer la table d'OTUs ou ASV :
+DADA2 : Utiliser makeSequenceTable pour créer la table des ASV.
+Mothur : Utiliser make.shared pour générer la table des OTUs.
+
+10. Analyse de la diversité et statistiques
+Calculer la diversité alpha et beta :
+DADA2 : Utiliser des fonctions comme rarefaction et dist.shared pour évaluer la diversité.
+Mothur : Utiliser des fonctions comme summary.single pour la diversité alpha et dist.shared pour la diversité beta.
+
+11. Visualisation et interprétation des données
+Créer des visualisations :
+Utiliser des graphiques (ex. : PCoA, bar plots, etc.) pour visualiser les résultats de l'analyse.
+
+12. Exportation des résultats
+Sauvegarder les résultats :
+Exporter la table des ASV/OTUs, les classifications taxonomiques, et d'autres résultats dans des formats appropriés (ex. : CSV, BIOM, etc.).
+Remarques supplémentaires
